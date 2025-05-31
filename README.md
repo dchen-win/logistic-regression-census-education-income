@@ -1,7 +1,6 @@
 # Logistic Regression on U.S. Census Data: Investigating the Relationship Between Education and Income
 
 **Author**: Cindy Chen  
-**Course**: ST518 – Final Project  
 **Date**: Spring 2025
 
 ---
