@@ -1,0 +1,326 @@
+---
+title: "ST518 Final Project"
+author: "Cindy Chenr"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r, message=FALSE, warning=FALSE}
+library("MASS")
+library("ordinal")
+library("nnet")
+library("questionr")
+library(utils)
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(tidyverse)
+```
+Introduction:
+Extraction was done by Barry Becker from the 1994 Census database.  A set of 
+reasonably clean records was extracted using the following conditions: ((AAGE>16) 
+&& (AGI>100) && (AFNLWGT>1)&& (HRSWK>0))
+
+Dataset attributes:
+
+* age: continuous.
+* workclass: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, 
+           State-gov, Without-pay, Never-worked.
+* fnlwgt: continuous.
+* education: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, 
+           Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 
+           5th-6th, Preschool.
+* education-num: continuous.
+* marital-status: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, 
+                Married-spouse-absent, Married-AF-spouse.
+* occupation: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, 
+            Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, 
+            Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, 
+            Armed-Forces.
+* relationship: Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
+* race: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black.
+* sex: Female, Male.
+* capital-gain: continuous.
+* capital-loss: continuous.
+* hours-per-week: continuous.
+* native-country: United-States, Cambodia, England, Puerto-Rico, Canada, Germany, 
+                Outlying-US(Guam-USVI-etc), India, Japan, Greece, South, China, 
+                Cuba, Iran, Honduras, Philippines, Italy, Poland, Jamaica, Vietnam, 
+                Mexico, Portugal, Ireland, France, Dominican-Republic, Laos, 
+                Ecuador, Taiwan, Haiti, Columbia, Hungary, Guatemala, Nicaragua, 
+                Scotland, Thailand, Yugoslavia, El-Salvador, Trinadad&Tobago, 
+                Peru, Hong, Holand-Netherlands.
+*income: >50K, <=50K.
+
+The response variable is the `income` which is a Boolean of the class column. 
+If the value above 50K per year, then 1 else 0 if they are below 50K per year. 
+Then I decide to apply binomial logistical regressions on the datasets.
+
+
+
+# Question: Are there any notable patterns or relationships between education and 
+income in the dataset?
+
+```{r}
+
+zip_file <- "C:/Users/15306/Desktop/ST 517 Data Analytics II/Final Project/adult.zip"
+
+unzip(zip_file, exdir = tempdir())
+
+data_file <- file.path(tempdir(), "adult.data")
+
+data_lines <- readLines(data_file)
+
+adult_data <- data.frame(do.call(rbind, strsplit(data_lines, ", ", fixed = TRUE)))
+
+
+str(adult_data)
+
+head(adult_data)
+
+```
+```{r}
+
+column_names <- c(
+  "age",
+  "workclass",
+  "fnlwgt",
+  "education",
+  "education-num",
+  "marital-status",
+  "occupation",
+  "relationship",
+  "race",
+  "sex",
+  "capital-gain",
+  "capital-loss",
+  "hours-per-week",
+  "native-country",
+  "income"
+)
+
+column_names
+```
+```{r}
+names(adult_data) <- column_names
+head(adult_data)
+```
+
+```{r}
+summary(adult_data)
+```
+```{r}
+
+if (any(is.na(adult_data))) {
+  print("There are missing values in the dataset.")
+} else {
+  print("There are no missing values in the dataset.")
+}
+
+
+if (any(duplicated(adult_data))) {
+  print("There are duplicate rows in the dataset.")
+} else {
+  print("There are no duplicate rows in the dataset.")
+}
+
+
+duplicate_rows <- adult_data[duplicated(adult_data), ]
+
+adult_data <- adult_data[!duplicated(adult_data), ]
+```
+
+
+
+
+```{r}
+`marital-status` <- unique(adult_data$`marital-status`)
+print(`marital-status` )
+```
+```{r}
+
+marital_status <- c("Never-married" = 1, "Married-civ-spouse" = 2, "Divorced" = 3, 
+          "Married-spouse-absent" = 4, "Separated" = 5, "Married-AF-spouse" = 6, 
+                            "Widowed" = 7)
+
+
+adult_data$marital_status <- marital_status[adult_data$`marital-status`]
+
+
+head(adult_data$marital_status)
+
+```
+
+```{r}
+occupation <- unique(adult_data$occupation)
+print(occupation)
+```
+
+```{r}
+occupation<- c("Adm-clerical" = 1, "Exec-managerial" = 2, "Handlers-cleaners" = 3, 
+               "Prof-specialty" = 4, "Other-service" = 5, "Sales" = 6, 
+               "Craft-repair" = 7, "Transport-moving" = 8, "Farming-fishing" = 9, 
+               "Machine-op-inspct" = 10, "Tech-support" = 11, "?" = 12, 
+               "Protective-serv" = 13, "Armed-Forces" = 14, "Priv-house-serv" = 15)
+
+
+adult_data$occupation <- occupation[adult_data$occupation]
+
+str(adult_data)
+```
+
+
+
+```{r}
+# Convert numeric variables to numeric type
+adult_data$age <- as.numeric(adult_data$age)
+adult_data$fnlwgt <- as.numeric(adult_data$fnlwgt)
+adult_data$`education-num` <- as.numeric(adult_data$`education-num`)
+adult_data$`capital-gain` <- as.numeric(adult_data$`capital-gain`)
+adult_data$`capital-loss` <- as.numeric(adult_data$`capital-loss`)
+adult_data$education <- as.factor(adult_data$education)
+adult_data$`hours-per-week` <- as.numeric(adult_data$`hours-per-week`)
+
+str(adult_data)
+```
+
+
+```{r}
+numeric_data <- adult_data |> 
+  dplyr::select(age, fnlwgt, `education-num`, `capital-gain`, `capital-loss`, 
+                `hours-per-week`, marital_status, occupation)
+
+str(numeric_data)
+
+```
+
+
+```{r}
+
+cor_matrix <- cor(numeric_data)
+colnames(cor_matrix) <- c("age", "fnlwgt", "education-num", "capital-gain", 
+              "capital-loss", "hours-per-week", "marital_status", "occupation")
+rownames(cor_matrix) <- colnames(cor_matrix)
+
+corrplot(cor_matrix, method = "color", type = "full", tl.col = "black", tl.srt = 45)
+
+```
+
+
+```{r}
+describe(numeric_data)
+```
+```{r}
+
+str(numeric_data)
+summary(numeric_data)
+any(is.na(numeric_data))
+
+```
+
+
+```{r}
+ggplot(adult_data, aes(x = education, color = income, group = income)) + 
+  geom_line(stat = "count") +
+  ggtitle("Education by Income") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+Summary:
+From the chart, we could see that for income >50k, the larger number of them have
+bachelor, master and some-college degree; for income <50k, the large number of
+them has HS-grad or lower, only smaller number of them have bachelor, master and 
+some-college degree. We could make assumption on that there is positive relation 
+between education and income. However, there is limitation in the analysis like 
+the size the dataset. We will need to do further analysis on that.
+
+
+# Question: How does income vary based on education level, occupation, and other demographic factors?
+
+```{r}
+head(adult_data)
+
+adult_data_q2 <- select(adult_data, `education-num`, marital_status, occupation, 
+                        `hours-per-week`, age, income)
+
+head(adult_data_q2)
+
+```
+```{r}
+adult_data_q2$income <- as.factor(adult_data_q2$income)
+adult_data_q2$income <- ifelse(adult_data_q2$income == ">50K", 1, 0)
+
+pca_result <- prcomp(adult_data_q2, scale.=TRUE)
+
+# Print PCA summary
+summary(pca_result)
+
+```
+
+
+
+
+
+```{r}
+
+X <- adult_data_q2 %>% select(-income)
+y <- adult_data_q2$income
+
+set.seed(123) 
+train_index <- sample(nrow(adult_data_q2), 0.8 * nrow(adult_data_q2))
+X_train <- X[train_index, ]
+y_train <- y[train_index]
+X_test <- X[-train_index, ]
+y_test <- y[-train_index]
+
+
+
+```
+
+
+
+```{r}
+logit_model <- glm(y_train ~ `education-num` + marital_status + occupation + 
+                  `hours-per-week` + age, data = X_train, family = binomial)
+
+predictions <- predict(logit_model, newdata = X_test, type = "response")
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+summary(logit_model)
+
+```
+
+
+```{r}
+
+confusion_matrix <- table(y_test, predicted_classes)
+confusion_matrix
+confusion_df <- as.data.frame.matrix(confusion_matrix)
+colnames(confusion_df) <- c("0", "1")
+confusion_df <- cbind(True_Classes = rownames(confusion_df), confusion_df)
+melted_confusion <- reshape2::melt(confusion_df, id.vars = "True_Classes")
+
+heatmap <- ggplot(data = melted_confusion, aes(x = True_Classes, y = variable, 
+                                               fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = value), vjust = 1) +
+  scale_fill_gradient(low = "white", high = "blue") +  # Use continuous scale
+  labs(x = "True Classes", y = "Predicted Classes", title = "Confusion Matrix") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(heatmap)
+
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Accuracy:", accuracy))
+
+```
+Summary:
+This logistic regression model predicts the binary outcome y_train using predictors 
+education-num, marital_status, occupation, hours-per-week, and age. Each predictor's 
+coefficient indicates its effect on the log odds of the response. The significance 
+of each predictor is assessed through the p-values. Lower p-values indicate higher 
+significance. All predictors are highly significant and it means they are likely 
+important for predicting the response variable. The model fits the data well, 
+with a low residual deviance and AIC value. Accuracy: 0.7958  - This metric 
+represents the overall correctness of the model's predictions. It's calculated 
+as the ratio of the sum of true positives and true negatives to the total number 
+of instances. In this case, approximately 79.58% of the predictions are correct.
